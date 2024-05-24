@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Voice Recognition Example with TTS Toggle</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
     <style>
         .chat-container {
             display: flex;
@@ -36,14 +38,85 @@
             font-style: italic;
             align-self: flex-end;
         }
+        #myChart {
+            max-width: 300px;
+            max-height: 300px;
+        }
     </style>
 </head>
 <body>
-    <h1>음성 인식 예제</h1>
+    <h1>당신만을 위한 심리치료사 푸름이</h1>
     <label><input type="checkbox" id="ttsToggle"> TTS 활성화</label>
+    <label><input type="checkbox" id="autoUpdate"> 자동 그래프 갱신</label>
     <p>마이크에 대고 말하세요...</p>
     <div class="chat-container" id="chat-container"></div>
+    <button id="stopRecognition">결과</button>
+    <button id="restartSession">다시 시작</button>
+    <canvas id="myChart" width="400" height="400"></canvas>
     <script>
+        let chartInstance = null; // Chart.js 인스턴스를 저장할 전역 변수
+
+        document.getElementById('stopRecognition').addEventListener('click', function() {
+            fetch('/stop_recognition') // 서버로 중단 요청
+            .then(response => response.json())
+            .then(data => {
+                console.log(data); // 서버로부터 받은 데이터 로깅
+                drawGraph(data); // 받은 데이터로 그래프 그리기
+            })
+            .catch(error => console.error("그래프 데이터 요청 오류: ", error));
+        });
+        
+        
+        document.getElementById('restartSession').addEventListener('click', function() {
+            fetch('/restart_session') // 세션 초기화 요청
+                .then(response => {
+                    console.log("세션이 초기화되었습니다.");
+                    location.reload(); // 화면 새로고침
+                })
+                .catch(error => console.error("세션 초기화 오류: ", error));
+        });
+
+
+        function drawGraph(data) {
+            // 데이터의 빈도를 계산합니다.
+            const frequency = data.reduce((acc, item) => {
+                acc[item] = (acc[item] || 0) + 1;
+                return acc;
+            }, {});
+
+            // Chart.js용 데이터 형태로 변환합니다.
+            const labels = Object.keys(frequency);
+            const values = Object.values(frequency);
+
+            // 기존의 그래프가 있으면 삭제합니다.
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            // Chart.js를 사용하여 그래프를 그립니다.
+            const ctx = document.getElementById('myChart').getContext('2d');
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '항목 빈도',
+                        data: values,
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
         // Web Speech API 지원 여부 확인
         if ('webkitSpeechRecognition' in window) {
             const recognition = new webkitSpeechRecognition();
@@ -56,46 +129,58 @@
             };
 
             recognition.onresult = function(event) {
-                for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    if (event.results[i].isFinal) {
-                        const recognizedText = event.results[i][0].transcript;
-                        console.log("Google 음성 인식이 이렇게 들었습니다: " + recognizedText);
-
-                        // 사용자가 말한 내용을 왼쪽 말풍선으로 추가
-                        addChatBubble(recognizedText, 'user-bubble');
-
-                        // 응답을 기다리는 동안 말풍선 추가
-                        const waitingBubble = addChatBubble('응답을 기다리는 중...', 'waiting-bubble');
-
-                        // 서버로 텍스트 전송
-                        fetch('/question', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({ text: recognizedText })
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            // 응답 받은 후 대기 말풍선 제거
-                            waitingBubble.remove();
-
-                            // 서버 응답을 오른쪽 말풍선으로 추가
-                            addChatBubble(data.response, 'response-bubble');
-
-                            // TTS 활성화 상태 확인
-                            if (document.getElementById('ttsToggle').checked) {
-                                // 서버 응답을 TTS로 말하기
-                                speak(data.response);
-                            }
-                        })
-                        .catch(error => {
-                            console.error("서버 응답 오류: ", error);
-                            waitingBubble.innerText = '오류가 발생했습니다.';
-                        });
-                    }
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    const recognizedText = event.results[i][0].transcript;
+                    console.log("Google 음성 인식이 이렇게 들었습니다: " + recognizedText);
+        
+                    // 사용자가 말한 내용을 왼쪽 말풍선으로 추가
+                    addChatBubble(recognizedText, 'user-bubble');
+        
+                    // 응답을 기다리는 동안 말풍선 추가
+                    const waitingBubble = addChatBubble('응답을 기다리는 중...', 'waiting-bubble');
+        
+                    // 서버로 텍스트 전송
+                    fetch('/question', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ text: recognizedText })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        // 응답 받은 후 대기 말풍선 제거
+                        waitingBubble.remove();
+        
+                        // 서버 응답을 오른쪽 말풍선으로 추가
+                        addChatBubble(data.response, 'response-bubble');
+        
+                        // TTS 활성화 상태 확인
+                        if (document.getElementById('ttsToggle').checked) {
+                            // 서버 응답을 TTS로 말하기
+                            speak(data.response);
+                        }
+        
+                        // 그래프 자동 갱신 체크박스가 체크되어 있는지 확인
+                        if (document.getElementById('autoUpdate').checked) {
+                            // 그래프 갱신
+                            fetch('/stop_recognition') // 서버로 중단 요청
+                                .then(response => response.json())
+                                .then(graphData => {
+                                    console.log(graphData); // 서버로부터 받은 데이터 로깅
+                                    drawGraph(graphData); // 받은 데이터로 그래프 그리기
+                                })
+                                .catch(error => console.error("그래프 데이터 요청 오류: ", error));
+                        }
+                    })
+                    .catch(error => {
+                        console.error("서버 응답 오류: ", error);
+                        waitingBubble.innerText = '오류가 발생했습니다.';
+                    });
                 }
-            };
+            }
+        };
 
             recognition.onerror = function(event) {
                 console.error("음성 인식 오류: ", event.error);

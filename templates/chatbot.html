@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voice Recognition Example</title>
+    <title>Voice Recognition Example with TTS Toggle</title>
     <style>
         .chat-container {
             display: flex;
@@ -40,6 +40,7 @@
 </head>
 <body>
     <h1>음성 인식 예제</h1>
+    <label><input type="checkbox" id="ttsToggle"> TTS 활성화</label>
     <p>마이크에 대고 말하세요...</p>
     <div class="chat-container" id="chat-container"></div>
     <script>
@@ -82,8 +83,11 @@
                             // 서버 응답을 오른쪽 말풍선으로 추가
                             addChatBubble(data.response, 'response-bubble');
 
-                            // 서버 응답을 TTS로 말하기
-                            speak(data.response);
+                            // TTS 활성화 상태 확인
+                            if (document.getElementById('ttsToggle').checked) {
+                                // 서버 응답을 TTS로 말하기
+                                speak(data.response);
+                            }
                         })
                         .catch(error => {
                             console.error("서버 응답 오류: ", error);
@@ -119,6 +123,10 @@
 
         function speak(text) {
             const synth = window.speechSynthesis;
+            // 현재 재생 중인 음성이 있다면 중지
+            if (synth.speaking) {
+                synth.cancel();
+            }
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'ko-KR';
             synth.speak(utterance);
